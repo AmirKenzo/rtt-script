@@ -1140,19 +1140,23 @@ EOF
 
 view_service_logs (){
 	clear
-	journalctl -eu "$1"
+	echo "Press Ctrl+C to exit live logs view..."
+	sleep 2
+	journalctl -fu "$1"
 
 }
 
 view_service_status (){
 	clear
 	systemctl status "$1"
+	echo
+	press_key
 
 }
 
 update_script(){
 # Define the destination path
-DEST_DIR="/usr/bin/"
+DEST_DIR="/usr/local/bin/"
 RATHOLE_SCRIPT="rathole"
 SCRIPT_URL="https://raw.githubusercontent.com/AmirKenzo/rtt-script/refs/heads/main/rathole.sh"
 
@@ -1181,7 +1185,7 @@ if [ $? -eq 0 ]; then
     #echo -e "${GREEN}New $RATHOLE_SCRIPT has been successfully downloaded to $DEST_DIR.${NC}\n"
     chmod +x "$DEST_DIR/$RATHOLE_SCRIPT"
     colorize yellow "Type 'rathole' to run the script.\n" bold
-    colorize yellow "For removing script type: 'rm -rf /usr/bin/rathole\n" bold
+    colorize yellow "For removing script type: 'rm -rf /usr/local/bin/rathole\n" bold
     press_key
     exit 0
 else
