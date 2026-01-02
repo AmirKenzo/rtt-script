@@ -903,37 +903,43 @@ tunnel_management() {
 	selected_config="${configs[$((choice - 1))]}"
 	config_name=$(basename "${selected_config%.toml}")
 	service_name="rathole-${config_name}.service"
-	  
-	clear
-	colorize cyan "List of available commands for $config_name:" bold
-	echo 
-	colorize red "1) Remove this tunnel"
-	colorize yellow "2) Restart this tunnel"
-	colorize green "3) Add a new config for this tunnel"
-	colorize cyan "4) Edit tunnel configuration"
-	colorize reset "5) Add a cronjob for this tunnel"
-	colorize reset "6) Remove existing cronjob for this tunnel"
-	colorize reset "7) View service logs"
-    colorize reset "8) View service status"
-	colorize magenta "9) Stop this tunnel"
-	colorize blue "10) Start this tunnel"
-	echo 
-	read -p "Enter your choice (0 to return): " choice
 	
-    case $choice in
-        1) destroy_tunnel "$selected_config" ;;
-        2) restart_service "$service_name" ;;
-        3) add_new_config "$selected_config" ;;
-        4) edit_tunnel_config "$selected_config" "$service_name" ;;
-        5) add_cron_job_menu "$service_name";;
-        6) delete_cron_job "$service_name";;
-        7) view_service_logs "$service_name" ;;
-        8) view_service_status "$service_name" ;;
-        9) stop_service "$service_name" ;;
-        10) start_service "$service_name" ;;
-        0) return 1 ;;
-        *) echo -e "${RED}Invalid option!${NC}" && sleep 1 && return 1;;
-    esac
+	# Loop for tunnel management menu
+	while true; do
+		clear
+		colorize cyan "List of available commands for $config_name:" bold
+		echo 
+		colorize red "1) Remove this tunnel"
+		colorize yellow "2) Restart this tunnel"
+		colorize green "3) Add a new config for this tunnel"
+		colorize cyan "4) Edit tunnel configuration"
+		colorize reset "5) Add a cronjob for this tunnel"
+		colorize reset "6) Remove existing cronjob for this tunnel"
+		colorize reset "7) View service logs"
+		colorize reset "8) View service status"
+		colorize magenta "9) Stop this tunnel"
+		colorize blue "10) Start this tunnel"
+		echo 
+		read -p "Enter your choice (0 to return): " choice
+		
+		case $choice in
+			1) 
+				destroy_tunnel "$selected_config"
+				return
+				;;
+			2) restart_service "$service_name" ;;
+			3) add_new_config "$selected_config" ;;
+			4) edit_tunnel_config "$selected_config" "$service_name" ;;
+			5) add_cron_job_menu "$service_name";;
+			6) delete_cron_job "$service_name";;
+			7) view_service_logs "$service_name" ;;
+			8) view_service_status "$service_name" ;;
+			9) stop_service "$service_name" ;;
+			10) start_service "$service_name" ;;
+			0) return ;;
+			*) echo -e "${RED}Invalid option!${NC}" && sleep 1 ;;
+		esac
+	done
 	
 }
 
@@ -1061,16 +1067,17 @@ destroy_tunnel(){
 restart_service() {
     echo
     service_name="$1"
+    service_path="$service_dir/$service_name"
     colorize yellow "Restarting $service_name" bold
     echo
     
-    # Check if service exists
-    if systemctl list-units --type=service | grep -q "$service_name"; then
+    # Check if service file exists
+    if [ -f "$service_path" ]; then
         systemctl restart "$service_name"
         colorize green "Service restarted successfully"
 
     else
-        colorize red "Cannot restart the service" 
+        colorize red "Cannot restart the service - service file not found" 
     fi
     echo
     press_key
@@ -1080,16 +1087,17 @@ restart_service() {
 stop_service() {
     echo
     service_name="$1"
+    service_path="$service_dir/$service_name"
     colorize yellow "Stopping $service_name" bold
     echo
     
-    # Check if service exists
-    if systemctl list-units --type=service | grep -q "$service_name"; then
+    # Check if service file exists
+    if [ -f "$service_path" ]; then
         systemctl stop "$service_name"
         colorize green "Service stopped successfully"
 
     else
-        colorize red "Cannot stop the service" 
+        colorize red "Cannot stop the service - service file not found" 
     fi
     echo
     press_key
@@ -1099,16 +1107,17 @@ stop_service() {
 start_service() {
     echo
     service_name="$1"
+    service_path="$service_dir/$service_name"
     colorize yellow "Starting $service_name" bold
     echo
     
-    # Check if service exists
-    if systemctl list-units --type=service | grep -q "$service_name"; then
+    # Check if service file exists
+    if [ -f "$service_path" ]; then
         systemctl start "$service_name"
         colorize green "Service started successfully"
 
     else
-        colorize red "Cannot start the service" 
+        colorize red "Cannot start the service - service file not found" 
     fi
     echo
     press_key
