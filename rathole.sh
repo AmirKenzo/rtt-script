@@ -1221,7 +1221,7 @@ fi
 # Check if rathole exists in /usr/local/bin
 if [ -f "$DEST_DIR/$RATHOLE_SCRIPT" ]; then
     # Remove the existing rathole
-    rm "$DEST_DIR/$RATHOLE_SCRIPT"
+    rm -f "$DEST_DIR/$RATHOLE_SCRIPT" >/dev/null 2>&1
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}Existing $RATHOLE_SCRIPT has been successfully removed from $DEST_DIR.${NC}"
     else
@@ -1239,8 +1239,15 @@ curl -s -L -o "$DEST_DIR/$RATHOLE_SCRIPT" "$SCRIPT_URL"
 
 echo
 if [ $? -eq 0 ]; then
-    #echo -e "${GREEN}New $RATHOLE_SCRIPT has been successfully downloaded to $DEST_DIR.${NC}\n"
+    # Set executable permission
     chmod +x "$DEST_DIR/$RATHOLE_SCRIPT"
+    if [ $? -eq 0 ]; then
+        colorize green "Script installed successfully in $DEST_DIR$RATHOLE_SCRIPT" bold
+        colorize green "Execute permission granted." bold
+    else
+        colorize red "Failed to set execute permission!" bold
+        colorize yellow "You may need to run: chmod +x $DEST_DIR$RATHOLE_SCRIPT" 
+    fi
     colorize yellow "Type 'rathole' to run the script.\n" bold
     colorize yellow "For removing script type: 'rm -rf /usr/local/bin/rathole'\n" bold
     press_key
