@@ -841,6 +841,54 @@ tunnel_management() {
 	
 }
 
+remove_script(){
+	echo
+	SCRIPT_PATH="/usr/local/bin/rathole"
+	OLD_SCRIPT_PATH="/usr/bin/rathole"
+	
+	# Prompt to confirm before removing script
+	colorize yellow "Do you want to remove the script? (y/n)" bold
+	read -r confirm
+	echo
+	
+	if [[ $confirm == [yY] ]]; then
+		removed=0
+		
+		# Remove main script from /usr/local/bin
+		if [[ -f "$SCRIPT_PATH" ]]; then
+			rm -f "$SCRIPT_PATH" >/dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				colorize green "Script removed from $SCRIPT_PATH" bold
+				removed=1
+			else
+				colorize red "Failed to remove script from $SCRIPT_PATH" bold
+			fi
+		else
+			colorize yellow "Script not found at $SCRIPT_PATH" 
+		fi
+		
+		# Also check /usr/bin for backward compatibility (old location)
+		if [[ -f "$OLD_SCRIPT_PATH" ]]; then
+			rm -f "$OLD_SCRIPT_PATH" >/dev/null 2>&1
+			if [ $? -eq 0 ]; then
+				colorize green "Script removed from $OLD_SCRIPT_PATH" bold
+				removed=1
+			fi
+		fi
+		
+		if [ $removed -eq 1 ]; then
+			colorize green "Script removed successfully!" bold
+		else
+			colorize yellow "No script found to remove." 
+		fi
+	else
+		colorize yellow "Script removal canceled."
+	fi
+	
+	echo
+	press_key
+}
+
 remove_core(){
 	echo
 	# If user try to remove core and still a service is running, we should prohibit this.	
@@ -1157,11 +1205,20 @@ view_service_status (){
 update_script(){
 # Define the destination path
 DEST_DIR="/usr/local/bin/"
+OLD_DEST_DIR="/usr/bin/"
 RATHOLE_SCRIPT="rathole"
 SCRIPT_URL="https://raw.githubusercontent.com/AmirKenzo/rtt-script/refs/heads/main/rathole.sh"
 
 echo
-# Check if rathole.sh exists in /bin/bash
+# Check if rathole exists in /usr/bin (old location) and remove it
+if [ -f "$OLD_DEST_DIR$RATHOLE_SCRIPT" ]; then
+    rm -f "$OLD_DEST_DIR$RATHOLE_SCRIPT" >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Old script removed from $OLD_DEST_DIR$RATHOLE_SCRIPT${NC}"
+    fi
+fi
+
+# Check if rathole exists in /usr/local/bin
 if [ -f "$DEST_DIR/$RATHOLE_SCRIPT" ]; then
     # Remove the existing rathole
     rm "$DEST_DIR/$RATHOLE_SCRIPT"
@@ -1185,7 +1242,7 @@ if [ $? -eq 0 ]; then
     #echo -e "${GREEN}New $RATHOLE_SCRIPT has been successfully downloaded to $DEST_DIR.${NC}\n"
     chmod +x "$DEST_DIR/$RATHOLE_SCRIPT"
     colorize yellow "Type 'rathole' to run the script.\n" bold
-    colorize yellow "For removing script type: 'rm -rf /usr/local/bin/rathole\n" bold
+    colorize yellow "For removing script type: 'rm -rf /usr/local/bin/rathole'\n" bold
     press_key
     exit 0
 else
@@ -1667,6 +1724,7 @@ display_menu() {
  	echo -e " 6. Update & install script"
  	echo -e " 7. Change core [experimental]"
  	echo -e " 8. Remove rathole core"
+ 	colorize yellow " 9. Remove script" bold
     echo -e " 0. Exit"
     echo
     echo "-------------------------------"
@@ -1674,7 +1732,7 @@ display_menu() {
 
 # Function to read user input
 read_option() {
-    read -p "Enter your choice [0-8]: " choice
+    read -p "Enter your choice [0-9]: " choice
     case $choice in
         1) configure_tunnel ;;
         2) tunnel_management ;;
@@ -1684,6 +1742,7 @@ read_option() {
         6) update_script ;;
         7) change_core ;;
         8) remove_core ;;
+        9) remove_script ;;
         0) exit 0 ;;
         *) echo -e "${RED} Invalid option!${NC}" && sleep 1 ;;
     esac
