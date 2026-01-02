@@ -120,9 +120,25 @@ install_jq
 config_dir="/root/rathole-core"
 # Function to download and extract Rathole Core
 download_and_extract_rathole() {
+    # Parse parameters
+    local version_type="normal"  # default: normal version from own repo
+    local sleep_param=""
+    
+    # Check for "sleep" parameter
+    if [[ "$1" == "sleep" ]]; then
+        sleep_param="sleep"
+    elif [[ -n "$1" ]]; then
+        version_type="$1"
+    fi
+    
+    # Check for "sleep" as second parameter
+    if [[ "$2" == "sleep" ]]; then
+        sleep_param="sleep"
+    fi
+    
     # check if core installed already
     if [[ -f "${config_dir}/rathole" ]]; then
-        if [[ "$1" == "sleep" ]]; then
+        if [[ "$sleep_param" == "sleep" ]]; then
         	echo 
             colorize green "Rathole Core is already installed." bold
         	sleep 1
@@ -143,15 +159,48 @@ download_and_extract_rathole() {
     # Check operating system
     if [[ $(uname) == "Linux" ]]; then
         ARCH=$(uname -m)
-        DOWNLOAD_URL=$(curl -sSL https://api.github.com/repos/rapiz1/rathole/releases/latest | grep -o "https://.*$ARCH.*linux.*zip" | head -n 1)
     else
         echo -e "${RED}Unsupported operating system.${NC}"
         sleep 1
         exit 1
     fi
-    if [[ "$ARCH" == "x86_64" ]]; then
-    	DOWNLOAD_URL='https://github.com/AmirKenzo/rtt-script/raw/main/core/rathole.zip'
-    fi
+    
+    # Set download URL based on version type
+    case "$version_type" in
+        "original")
+            # Download from official rathole repo
+            if [[ "$ARCH" == "x86_64" ]]; then
+                DOWNLOAD_URL=$(curl -sSL https://api.github.com/repos/rathole-org/rathole/releases/latest | grep -o "https://.*$ARCH.*linux.*zip" | head -n 1)
+            else
+                DOWNLOAD_URL=$(curl -sSL https://api.github.com/repos/rathole-org/rathole/releases/latest | grep -o "https://.*$ARCH.*linux.*zip" | head -n 1)
+            fi
+            ZIP_FILENAME="rathole.zip"
+            EXTRACTED_NAME="rathole"
+            ;;
+        "modified")
+            # Download modified version from own repo
+            if [[ "$ARCH" == "x86_64" ]]; then
+                DOWNLOAD_URL='https://github.com/AmirKenzo/rtt-script/raw/main/core/rathole_modified.zip'
+            else
+                echo -e "${RED}Modified version is only available for x86_64 architecture.${NC}"
+                sleep 1
+                return 1
+            fi
+            ZIP_FILENAME="rathole_modified.zip"
+            EXTRACTED_NAME="rathole_modified"
+            ;;
+        "normal"|*)
+            # Download normal version from own repo (default)
+            if [[ "$ARCH" == "x86_64" ]]; then
+                DOWNLOAD_URL='https://github.com/AmirKenzo/rtt-script/raw/main/core/rathole.zip'
+            else
+                # For non-x86_64, try to get from official repo
+                DOWNLOAD_URL=$(curl -sSL https://api.github.com/repos/rathole-org/rathole/releases/latest | grep -o "https://.*$ARCH.*linux.*zip" | head -n 1)
+            fi
+            ZIP_FILENAME="rathole.zip"
+            EXTRACTED_NAME="rathole"
+            ;;
+    esac
 
     if [ -z "$DOWNLOAD_URL" ]; then
         echo -e "${RED}Failed to retrieve download URL.${NC}"
@@ -162,10 +211,16 @@ download_and_extract_rathole() {
     DOWNLOAD_DIR=$(mktemp -d)
     echo -e "Downloading Rathole from $DOWNLOAD_URL...\n"
     sleep 1
-    curl -sSL -o "$DOWNLOAD_DIR/rathole.zip" "$DOWNLOAD_URL"
+    curl -sSL -o "$DOWNLOAD_DIR/$ZIP_FILENAME" "$DOWNLOAD_URL"
     echo -e "Extracting Rathole...\n"
     sleep 1
-    unzip -q "$DOWNLOAD_DIR/rathole.zip" -d "$config_dir"
+    unzip -q "$DOWNLOAD_DIR/$ZIP_FILENAME" -d "$config_dir"
+    
+    # Handle renamed file for modified version
+    if [[ "$version_type" == "modified" ]] && [[ -f "${config_dir}/rathole_modified" ]]; then
+        mv -f "${config_dir}/rathole_modified" "${config_dir}/rathole"
+    fi
+    
     echo -e "${GREEN}Rathole installation completed.${NC}\n"
     chmod u+x ${config_dir}/rathole
     rm -rf "$DOWNLOAD_DIR"
@@ -1712,6 +1767,44 @@ install_modified_core(){
     echo
 }
 
+install_rathole_core_menu(){
+	echo
+	ARCH=$(uname -m)
+	
+	colorize cyan "Select rathole-core version to install:" bold
+	echo
+	colorize cyan "1) Original Core (from official rathole repo)"
+	colorize green "2) Normal Core (from own repo - default)"
+	if [[ "$ARCH" == "x86_64" ]]; then
+		colorize yellow "3) Modified Core (Lower connections, maybe higher latency)"
+		colorize reset "4) return "
+		echo
+		read -p "Enter your choice [1-4]: " choice
+		
+		case $choice in
+			1) download_and_extract_rathole "original" "sleep" ;;
+			2) download_and_extract_rathole "normal" "sleep" ;;
+			3) download_and_extract_rathole "modified" "sleep" ;;
+			4) return 1 ;;
+			*) echo -e "${RED} Invalid option!${NC}" && sleep 1 && return 1 ;;
+		esac
+	else
+		colorize reset "3) return "
+		echo
+		read -p "Enter your choice [1-3]: " choice
+		
+		case $choice in
+			1) download_and_extract_rathole "original" "sleep" ;;
+			2) download_and_extract_rathole "normal" "sleep" ;;
+			3) return 1 ;;
+			*) echo -e "${RED} Invalid option!${NC}" && sleep 1 && return 1 ;;
+		esac
+	fi
+	
+	echo
+	press_key
+}
+
 change_core(){
 	echo
 	ARCH=$(uname -m)
@@ -1723,18 +1816,21 @@ change_core(){
 	 	
 	colorize cyan "Select your rathole-core:" bold
 	echo
-	colorize green "1) Default Core"
-	colorize yellow "2) Modified Core (Lower connections, maybe higher latency)"
-	colorize reset "3) return "
+	colorize cyan "1) Original Core (from official rathole repo)"
+	colorize green "2) Normal Core (from own repo - default)"
+	colorize yellow "3) Modified Core (Lower connections, maybe higher latency)"
+	colorize reset "4) return "
 	echo
-	read -p "Enter your choice [1-3]: " choice
+	read -p "Enter your choice [1-4]: " choice
 
 	case $choice in
         1) rm -f "${config_dir}/rathole" &> /dev/null 
-        download_and_extract_rathole ;;
+        download_and_extract_rathole "original" ;;
         2) rm -f "${config_dir}/rathole" &> /dev/null 
-        install_modified_core;;
-        3) return 1 ;;
+        download_and_extract_rathole "normal" ;;
+        3) rm -f "${config_dir}/rathole" &> /dev/null 
+        download_and_extract_rathole "modified" ;;
+        4) return 1 ;;
         *) echo -e "${RED} Invalid option!${NC}" && sleep 1 && return 1 ;;
     esac
 	
@@ -1782,7 +1878,7 @@ read_option() {
         2) tunnel_management ;;
         3) check_tunnel_status ;;
         4) hawshemi_script ;;
-        5) download_and_extract_rathole "sleep";;
+        5) install_rathole_core_menu ;;
         6) update_script ;;
         7) change_core ;;
         8) remove_core ;;
