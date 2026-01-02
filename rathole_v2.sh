@@ -319,7 +319,7 @@ iran_server_configuration() {
 	echo 
 	
 	while true; do
-	    echo -ne "[*] Tunnel port: "
+	    echo -ne "[*] Rathole port: "
 	    read -r tunnel_port
 	
 	    if [[ "$tunnel_port" =~ ^[0-9]+$ ]] && [ "$tunnel_port" -gt 22 ] && [ "$tunnel_port" -le 65535 ]; then
@@ -339,8 +339,11 @@ iran_server_configuration() {
 	local nodelay=""
 	# Keep prompting the user until a valid input is provided
 	while [[ "$nodelay" != "true" && "$nodelay" != "false" ]]; do
-	    echo -ne "[*] Enable TCP_NODELAY (true/false): " 
+	    echo -ne "[*] TCP_NODELAY (true/false) [default: true]: " 
 	    read -r nodelay
+	    if [[ -z "$nodelay" ]]; then
+	        nodelay="true"
+	    fi
 	    if [[ "$nodelay" != "true" && "$nodelay" != "false" ]]; then
 	        colorize red "Invalid TCP_NODELAY value. Please enter 'true' or 'false'"
 	    fi
@@ -352,8 +355,11 @@ iran_server_configuration() {
 	local HEARTBEAT=""
 	# Keep prompting the user until a valid input is provided
 	while [[ "$HEARTBEAT" != "true" && "$HEARTBEAT" != "false" ]]; do
-	    echo -ne "[*] Enable HEARTBEAT (true/false): " 
+	    echo -ne "[*] Enable HEARTBEAT (true/false) [default: false]: " 
 	    read -r HEARTBEAT
+	    if [[ -z "$HEARTBEAT" ]]; then
+	        HEARTBEAT="false"
+	    fi
 	    if [[ "$HEARTBEAT" != "true" && "$HEARTBEAT" != "false" ]]; then
 	        colorize red "Invalid HEARTBEAT value. Please enter 'true' or 'false'"
 	    fi
@@ -437,7 +443,7 @@ EOF
     # Add each config port to the configuration file
     for port in "${config_ports[@]}"; do
         cat << EOF >> "${config_dir}/iran${tunnel_port}.toml"
-[server.services.${port}]
+[server.services.${tunnel_port}]
 type = "$transport"
 bind_addr = "${local_ip}:${port}"
 
@@ -500,7 +506,7 @@ kharej_server_configuration() {
     
     # Read the tunnel port
  	while true; do
-	    echo -ne "[*] Tunnel port: "
+	    echo -ne "[*] Rathole port: "
 	    read -r tunnel_port
 	
 	    if [[ "$tunnel_port" =~ ^[0-9]+$ ]] && [ "$tunnel_port" -gt 22 ] && [ "$tunnel_port" -le 65535 ]; then
@@ -516,8 +522,11 @@ kharej_server_configuration() {
 	local nodelay=""
 	# Keep prompting the user until a valid input is provided
 	while [[ "$nodelay" != "true" && "$nodelay" != "false" ]]; do
-	    echo -ne "[*] TCP_NODELAY (true/false): " 
+	    echo -ne "[*] TCP_NODELAY (true/false) [default: true]: " 
 	    read -r nodelay
+	    if [[ -z "$nodelay" ]]; then
+	        nodelay="true"
+	    fi
 	    if [[ "$nodelay" != "true" && "$nodelay" != "false" ]]; then
 	        colorize red "Invalid nodelay input. Please enter 'true' or 'false'"
 	    fi
@@ -529,8 +538,11 @@ kharej_server_configuration() {
 	local HEARTBEAT=""
 	# Keep prompting the user until a valid input is provided
 	while [[ "$HEARTBEAT" != "true" && "$HEARTBEAT" != "false" ]]; do
-	    echo -ne "[*] Enable HEARTBEAT (true/false): " 
+	    echo -ne "[*] Enable HEARTBEAT (true/false) [default: false]: " 
 	    read -r HEARTBEAT
+	    if [[ -z "$HEARTBEAT" ]]; then
+	        HEARTBEAT="false"
+	    fi
 	    if [[ "$HEARTBEAT" != "true" && "$HEARTBEAT" != "false" ]]; then
 	        colorize red "Invalid HEARTBEAT value. Please enter 'true' or 'false'"
 	    fi
@@ -570,8 +582,7 @@ kharej_server_configuration() {
 	echo
 	
 		
-	# Prompt for Ports
-	echo -ne "[*] Enter your ports separated by commas (e.g. 2070,2080): "
+	echo -ne "[*] Enter your inbound ports separated by commas (e.g. 2070,2080): "
 	read -r input_ports
 	input_ports=$(echo "$input_ports" | tr -d ' ')
 	declare -a config_ports
