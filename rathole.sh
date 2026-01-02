@@ -121,7 +121,7 @@ config_dir="/root/rathole-core"
 # Function to download and extract Rathole Core
 download_and_extract_rathole() {
     # Parse parameters
-    local version_type="normal"  # default: normal version from own repo
+    local version_type="original"  # default: original version from own repo
     local sleep_param=""
     
     # Check for "sleep" parameter
