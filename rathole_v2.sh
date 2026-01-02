@@ -377,8 +377,11 @@ iran_server_configuration() {
 	# Keep prompting the user until a valid input is provided
 	while [[ "$transport" != "tcp" && "$transport" != "udp" ]]; do
 	    # Prompt the user to input transport type
-	    echo -ne "[*] Transport type(tcp/udp): " 
+	    echo -ne "[*] Transport type (tcp/udp) [default: tcp]: " 
 	    read -r transport
+	    if [[ -z "$transport" ]]; then
+	        transport="tcp"
+	    fi
 	
 	    # Check if the input is either tcp or udp
 	    if [[ "$transport" != "tcp" && "$transport" != "udp" ]]; then
@@ -562,8 +565,11 @@ kharej_server_configuration() {
 	# Keep prompting the user until a valid input is provided
 	while [[ "$transport" != "tcp" && "$transport" != "udp" ]]; do
 	    # Prompt the user to input transport type
-	    echo -ne "[*] Transport type (tcp/udp): " 
+	    echo -ne "[*] Transport type (tcp/udp) [default: tcp]: " 
 	    read -r transport
+	    if [[ -z "$transport" ]]; then
+	        transport="tcp"
+	    fi
 	
 	    # Check if the input is either tcp or udp
 	    if [[ "$transport" != "tcp" && "$transport" != "udp" ]]; then
@@ -983,8 +989,11 @@ add_new_config(){
 	# Keep prompting the user until a valid input is provided
 	while [[ "$transport" != "tcp" && "$transport" != "udp" ]]; do
 	    # Prompt the user to input transport type
-	    echo -ne "[*] Transport type(tcp/udp): " 
+	    echo -ne "[*] Transport type (tcp/udp) [default: tcp]: " 
 	    read -r transport
+	    if [[ -z "$transport" ]]; then
+	        transport="tcp"
+	    fi
 	
 	    # Check if the input is either tcp or udp
 	    if [[ "$transport" != "tcp" && "$transport" != "udp" ]]; then
