@@ -740,6 +740,41 @@ check_tunnel_status() {
 }
 
 
+# Function to edit tunnel configuration
+edit_tunnel_config() {
+    local config_path="$1"
+    local service_name="$2"
+    
+    clear
+    colorize cyan "Edit tunnel configuration" bold
+    echo
+    
+    # Check if config file exists
+    if [ ! -f "$config_path" ]; then
+        colorize red "Config file not found!" bold
+        sleep 2
+        return 1
+    fi
+    
+    # Open config file with nano
+    colorize yellow "Opening config file with nano..." bold
+    echo "After editing, save with Ctrl+O and exit with Ctrl+X"
+    sleep 2
+    
+    nano "$config_path"
+    
+    # Ask if user wants to restart the service
+    echo
+    read -p "Do you want to restart the service? (y/n) [default: y]: " restart_choice
+    if [[ -z "$restart_choice" ]] || [[ "$restart_choice" == "y" ]] || [[ "$restart_choice" == "Y" ]]; then
+        restart_service "$service_name"
+    else
+        colorize yellow "Service not restarted. Remember to restart it manually if needed." bold
+        echo
+        press_key
+    fi
+}
+
 # Function for destroying tunnel
 tunnel_management() {
 	echo
@@ -820,10 +855,11 @@ tunnel_management() {
 	colorize red "1) Remove this tunnel"
 	colorize yellow "2) Restart this tunnel"
 	colorize green "3) Add a new config for this tunnel"
-	colorize reset "4) Add a cronjob for this tunnel"
-	colorize reset "5) Remove existing cronjob for this tunnel"
-	colorize reset "6) View service logs"
-    colorize reset "7) View service status"
+	colorize cyan "4) Edit tunnel configuration"
+	colorize reset "5) Add a cronjob for this tunnel"
+	colorize reset "6) Remove existing cronjob for this tunnel"
+	colorize reset "7) View service logs"
+    colorize reset "8) View service status"
 	echo 
 	read -p "Enter your choice (0 to return): " choice
 	
@@ -831,10 +867,11 @@ tunnel_management() {
         1) destroy_tunnel "$selected_config" ;;
         2) restart_service "$service_name" ;;
         3) add_new_config "$selected_config" ;;
-        4) add_cron_job_menu "$service_name";;
-        5) delete_cron_job "$service_name";;
-        6) view_service_logs "$service_name" ;;
-        7) view_service_status "$service_name" ;;
+        4) edit_tunnel_config "$selected_config" "$service_name" ;;
+        5) add_cron_job_menu "$service_name";;
+        6) delete_cron_job "$service_name";;
+        7) view_service_logs "$service_name" ;;
+        8) view_service_status "$service_name" ;;
         0) return 1 ;;
         *) echo -e "${RED}Invalid option!${NC}" && sleep 1 && return 1;;
     esac
