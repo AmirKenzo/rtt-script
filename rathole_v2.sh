@@ -638,7 +638,7 @@ EOF
     # Add each config port to the configuration file
     for port in "${config_ports[@]}"; do
         cat << EOF >> "${config_dir}/kharej${tunnel_port}.toml"
-[client.services.${port}]
+[client.services.${tunnel_port}]
 type = "$transport"
 local_addr = "${local_ip}:${port}"
 
@@ -1019,11 +1019,18 @@ add_new_config(){
 	
 	echo
 	
+	config_name=$(basename "${config_path%.toml}")
+	if [[ "$config_name" == iran* ]]; then
+		tunnel_port="${config_name#iran}"
+	else
+		tunnel_port="${config_name#kharej}"
+	fi
+	
 	if grep -q "iran" <<< "$config_path"; then
 	# Add each config port to the configuration file
     for port in "${config_ports[@]}"; do
         cat << EOF >> "$config_path"
-[server.services.${port}]
+[server.services.${tunnel_port}]
 type = "$transport"
 bind_addr = "${local_ip}:${port}"
 
@@ -1034,7 +1041,7 @@ EOF
     # Add each config port to the configuration file
     for port in "${config_ports[@]}"; do
         cat << EOF >> "$config_path"
-[client.services.${port}]
+[client.services.${tunnel_port}]
 type = "$transport"
 local_addr = "${local_ip}:${port}"
 
