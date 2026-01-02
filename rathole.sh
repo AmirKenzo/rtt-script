@@ -251,7 +251,7 @@ ____________ _/  |_|  |__   ____ |  |   ____
             \/          \/                 \/ 	
 EOF
     echo -e "${NC}${GREEN}"
-    echo -e "Version: ${YELLOW}v3.0${GREEN}"
+    echo -e "Version: ${YELLOW}v3.1${GREEN}"
     echo -e "Github: ${YELLOW}github.com/AmirKenzo/rtt-script${GREEN}"
 }
 
@@ -915,6 +915,8 @@ tunnel_management() {
 	colorize reset "6) Remove existing cronjob for this tunnel"
 	colorize reset "7) View service logs"
     colorize reset "8) View service status"
+	colorize magenta "9) Stop this tunnel"
+	colorize blue "10) Start this tunnel"
 	echo 
 	read -p "Enter your choice (0 to return): " choice
 	
@@ -927,6 +929,8 @@ tunnel_management() {
         6) delete_cron_job "$service_name";;
         7) view_service_logs "$service_name" ;;
         8) view_service_status "$service_name" ;;
+        9) stop_service "$service_name" ;;
+        10) start_service "$service_name" ;;
         0) return 1 ;;
         *) echo -e "${RED}Invalid option!${NC}" && sleep 1 && return 1;;
     esac
@@ -1067,6 +1071,44 @@ restart_service() {
 
     else
         colorize red "Cannot restart the service" 
+    fi
+    echo
+    press_key
+}
+
+#Function to stop services
+stop_service() {
+    echo
+    service_name="$1"
+    colorize yellow "Stopping $service_name" bold
+    echo
+    
+    # Check if service exists
+    if systemctl list-units --type=service | grep -q "$service_name"; then
+        systemctl stop "$service_name"
+        colorize green "Service stopped successfully"
+
+    else
+        colorize red "Cannot stop the service" 
+    fi
+    echo
+    press_key
+}
+
+#Function to start services
+start_service() {
+    echo
+    service_name="$1"
+    colorize yellow "Starting $service_name" bold
+    echo
+    
+    # Check if service exists
+    if systemctl list-units --type=service | grep -q "$service_name"; then
+        systemctl start "$service_name"
+        colorize green "Service started successfully"
+
+    else
+        colorize red "Cannot start the service" 
     fi
     echo
     press_key
