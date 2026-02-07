@@ -251,7 +251,7 @@ ____________ _/  |_|  |__   ____ |  |   ____
             \/          \/                 \/ 	
 EOF
     echo -e "${NC}${GREEN}"
-    echo -e "Version: ${YELLOW}v3.1${GREEN}"
+    echo -e "Version: ${YELLOW}v3.2${GREEN}"
     echo -e "Github: ${YELLOW}github.com/AmirKenzo/rtt-script${GREEN}"
 }
 
@@ -830,6 +830,30 @@ edit_tunnel_config() {
     fi
 }
 
+# Get one-line service info from a toml config (type, bind, remote)
+get_service_display_info() {
+    local f="$1"
+    local name config_port
+    [[ -f "$f" ]] || return
+    name=$(basename "$f" .toml)
+    config_port="${name#iran}"
+    config_port="${config_port#kharej}"
+    if [[ "$name" == iran* ]]; then
+        local bind_addrs types
+        bind_addrs=$(grep 'bind_addr' "$f" 2>/dev/null | sed -E 's/.*=\s*"([^"]+)".*/\1/' | paste -sd, -)
+        types=$(awk '/^\[server\.services\./,/^\[/{ if (/type\s*=\s*"/) { gsub(/.*"|".*/, ""); print } }' "$f" 2>/dev/null | sort -u | paste -sd, -)
+        [[ -z "$types" ]] && types="tcp"
+        echo -e "${GREEN}Iran${NC} | Tunnel: ${YELLOW}$config_port${NC} | Bind: ${CYAN}$bind_addrs${NC} | Type: ${CYAN}${types:-tcp}${NC}"
+    else
+        local remote bind_addrs types
+        remote=$(grep -m1 'remote_addr' "$f" 2>/dev/null | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+        bind_addrs=$(grep 'local_addr' "$f" 2>/dev/null | sed -E 's/.*=\s*"([^"]+)".*/\1/' | paste -sd, -)
+        types=$(awk '/^\[client\.services\./,/^\[/{ if (/type\s*=\s*"/) { gsub(/.*"|".*/, ""); print } }' "$f" 2>/dev/null | sort -u | paste -sd, -)
+        [[ -z "$types" ]] && types="tcp"
+        echo -e "${GREEN}Kharej${NC} | Tunnel: ${YELLOW}$config_port${NC} | Bind: ${CYAN}$bind_addrs${NC} | Remote: ${CYAN}$remote${NC} | Type: ${CYAN}${types:-tcp}${NC}"
+    fi
+}
+
 # Function for destroying tunnel
 tunnel_management() {
 	echo
@@ -851,32 +875,22 @@ tunnel_management() {
 
     for config_path in "$config_dir"/iran*.toml; do
         if [ -f "$config_path" ]; then
-            # Extract config_name without directory path
             config_name=$(basename "$config_path")
-            
-            # Remove "iran" prefix and ".toml" suffix
             config_port="${config_name#iran}"
             config_port="${config_port%.toml}"
-            
             configs+=("$config_path")
-            echo -e "${MAGENTA}${index}${NC}) ${GREEN}Iran${NC} service, Tunnel port: ${YELLOW}$config_port${NC}"
+            echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path")"
             ((index++))
         fi
     done
-    
 
-    
     for config_path in "$config_dir"/kharej*.toml; do
         if [ -f "$config_path" ]; then
-            # Extract config_name without directory path
             config_name=$(basename "$config_path")
-            
-            # Remove "kharej" prefix and ".toml" suffix
             config_port="${config_name#kharej}"
             config_port="${config_port%.toml}"
-            
             configs+=("$config_path")
-            echo -e "${MAGENTA}${index}${NC}) ${GREEN}Kharej${NC} service, Tunnel port: ${YELLOW}$config_port${NC}"
+            echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path")"
             ((index++))
         fi
     done
@@ -913,8 +927,8 @@ tunnel_management() {
 		colorize yellow "2) Restart this tunnel"
 		colorize green "3) Add a new config for this tunnel"
 		colorize cyan "4) Edit tunnel configuration"
-		colorize reset "5) Add a cronjob for this tunnel"
-		colorize reset "6) Remove existing cronjob for this tunnel"
+		colorize reset "5) Add a cronjob for this tunnel (DEPRECATED - restarts whole rathole)"
+		colorize reset "6) Remove existing cronjob for this tunnel (DEPRECATED)"
 		colorize reset "7) View service logs"
 		colorize reset "8) View service status"
 		colorize magenta "9) Stop this tunnel"
@@ -930,8 +944,8 @@ tunnel_management() {
 			2) restart_service "$service_name" ;;
 			3) add_new_config "$selected_config" ;;
 			4) edit_tunnel_config "$selected_config" "$service_name" ;;
-			5) add_cron_job_menu "$service_name";;
-			6) delete_cron_job "$service_name";;
+			5) colorize yellow "DEPRECATED: This restarts whole rathole, not just this tunnel. Use main menu -> Rathole cronjob instead." bold; sleep 2; add_cron_job_menu "$service_name";;
+			6) colorize yellow "DEPRECATED: Removing per-tunnel cronjob. Use main menu -> Rathole cronjob to manage global cronjob." bold; sleep 2; delete_cron_job "$service_name";;
 			7) view_service_logs "$service_name" ;;
 			8) view_service_status "$service_name" ;;
 			9) stop_service "$service_name" ;;
@@ -1151,6 +1165,124 @@ delete_cron_job() {
     
     colorize green "Cron job for $service_name deleted successfully." bold
     sleep 2
+}
+
+# Global rathole restart cronjob (main menu) - restarts all rathole services
+RATHOLE_GLOBAL_CRON_MARKER="rathole-global-restart"
+RATHOLE_GLOBAL_SCRIPT_PATH="${config_dir}/rathole-global-restart.sh"
+
+get_global_cron_status() {
+    local line
+    line=$(crontab -l 2>/dev/null | grep "#${RATHOLE_GLOBAL_CRON_MARKER}$")
+    if [[ -n "$line" ]]; then
+        echo "Active"
+        echo "$line" | awk '{print $1, $2, $3, $4, $5}'
+    else
+        echo "Not set"
+    fi
+}
+
+main_remove_global_cronjob() {
+    crontab -l 2>/dev/null | grep -v "#${RATHOLE_GLOBAL_CRON_MARKER}$" | crontab -
+    rm -f "$RATHOLE_GLOBAL_SCRIPT_PATH" >/dev/null 2>&1
+    colorize green "Global rathole cronjob removed." bold
+    sleep 2
+}
+
+main_add_global_cronjob() {
+    local restart_time
+    colorize cyan "Select restart schedule (Add/Edit):" bold
+    echo
+    echo " 1. Every 10 minutes"
+    echo " 2. Every 15 minutes"
+    echo " 3. Every 30 minutes"
+    echo " 4. Every 1 hour"
+    echo " 5. Every 2 hours"
+    echo " 6. Every 4 hours"
+    echo " 7. Every 6 hours"
+    echo " 8. Every 12 hours"
+    echo " 9. Every 24 hours (midnight)"
+    echo "10. Custom: minute (0-59)"
+    echo "11. Custom: hour and minute"
+    echo
+    read -p "Enter your choice [1-11]: " time_choice
+    case $time_choice in
+        1) restart_time="*/10 * * * *" ;;
+        2) restart_time="*/15 * * * *" ;;
+        3) restart_time="*/30 * * * *" ;;
+        4) restart_time="0 * * * *" ;;
+        5) restart_time="0 */2 * * *" ;;
+        6) restart_time="0 */4 * * *" ;;
+        7) restart_time="0 */6 * * *" ;;
+        8) restart_time="0 */12 * * *" ;;
+        9) restart_time="0 0 * * *" ;;
+        10)
+            read -p "Minute (0-59): " m
+            if [[ "$m" =~ ^[0-9]+$ ]] && [ "$m" -ge 0 ] && [ "$m" -le 59 ]; then
+                restart_time="$m * * * *"
+            else
+                colorize red "Invalid minute." bold
+                return 1
+            fi
+            ;;
+        11)
+            read -p "Hour (0-23): " h
+            read -p "Minute (0-59): " m
+            if [[ "$h" =~ ^[0-9]+$ ]] && [ "$h" -ge 0 ] && [ "$h" -le 23 ] && [[ "$m" =~ ^[0-9]+$ ]] && [ "$m" -ge 0 ] && [ "$m" -le 59 ]; then
+                restart_time="$m $h * * *"
+            else
+                colorize red "Invalid hour or minute." bold
+                return 1
+            fi
+            ;;
+        *)
+            colorize red "Invalid choice." bold
+            return 1
+            ;;
+    esac
+    # Remove existing global cronjob
+    crontab -l 2>/dev/null | grep -v "#${RATHOLE_GLOBAL_CRON_MARKER}$" | crontab -
+    cat << EOF > "$RATHOLE_GLOBAL_SCRIPT_PATH"
+#!/bin/bash
+# Restart all rathole services (whole rathole)
+for u in \$(systemctl list-units 'rathole-*.service' --no-legend 2>/dev/null | awk '{print \$1}'); do
+  systemctl restart "\$u"
+done
+EOF
+    chmod +x "$RATHOLE_GLOBAL_SCRIPT_PATH"
+    (crontab -l 2>/dev/null; echo "$restart_time $RATHOLE_GLOBAL_SCRIPT_PATH #${RATHOLE_GLOBAL_CRON_MARKER}") | crontab -
+    colorize green "Global rathole cronjob added/updated successfully." bold
+    sleep 2
+}
+
+main_cronjob_menu() {
+    local status_result
+    local status
+    local schedule
+    clear
+    colorize cyan "Rathole global cronjob (restart whole rathole)" bold
+    echo
+    status_result=$(get_global_cron_status)
+    status=$(echo "$status_result" | head -n1)
+    schedule=$(echo "$status_result" | tail -n +2)
+    if [[ "$status" == "Active" ]]; then
+        colorize green "Status: $status" bold
+        echo "Schedule: $schedule"
+    else
+        colorize yellow "Status: $status"
+    fi
+    echo
+    echo " 1) Add or edit cronjob"
+    echo " 2) Remove cronjob"
+    echo " 0) Return"
+    echo
+    read -p "Enter your choice: " c
+    case $c in
+        1) main_add_global_cronjob ;;
+        2) main_remove_global_cronjob ;;
+        0) return ;;
+        *) colorize red "Invalid option." bold ;;
+    esac
 }
 
 add_new_config(){
@@ -1910,12 +2042,13 @@ display_menu() {
     colorize green " 1. Configure a new tunnel [IPv4/IPv6]" bold
     colorize red " 2. Tunnel management menu" bold
     colorize cyan " 3. Check tunnels status" bold
- 	echo -e " 4. Optimize network & system limits"
- 	echo -e " 5. Install rathole core"
- 	echo -e " 6. Update & install script"
- 	echo -e " 7. Change core [experimental]"
- 	echo -e " 8. Remove rathole core"
- 	colorize yellow " 9. Remove script" bold
+ 	echo -e " 4. Rathole cronjob (add/remove/edit - restart whole rathole)"
+ 	echo -e " 5. Optimize network & system limits"
+ 	echo -e " 6. Install rathole core"
+ 	echo -e " 7. Update & install script"
+ 	echo -e " 8. Change core [experimental]"
+ 	echo -e " 9. Remove rathole core"
+ 	colorize yellow " 10. Remove script" bold
     echo -e " 0. Exit"
     echo
     echo "-------------------------------"
@@ -1923,17 +2056,18 @@ display_menu() {
 
 # Function to read user input
 read_option() {
-    read -p "Enter your choice [0-9]: " choice
+    read -p "Enter your choice [0-10]: " choice
     case $choice in
         1) configure_tunnel ;;
         2) tunnel_management ;;
         3) check_tunnel_status ;;
-        4) hawshemi_script ;;
-        5) install_rathole_core_menu ;;
-        6) update_script ;;
-        7) change_core ;;
-        8) remove_core ;;
-        9) remove_script ;;
+        4) main_cronjob_menu ;;
+        5) hawshemi_script ;;
+        6) install_rathole_core_menu ;;
+        7) update_script ;;
+        8) change_core ;;
+        9) remove_core ;;
+        10) remove_script ;;
         0) exit 0 ;;
         *) echo -e "${RED} Invalid option!${NC}" && sleep 1 ;;
     esac
