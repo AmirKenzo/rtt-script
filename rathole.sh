@@ -854,6 +854,20 @@ get_service_display_info() {
     fi
 }
 
+# Return status badge for a tunnel config (Active/Inactive)
+get_tunnel_status() {
+    local f="$1"
+    local name service_name
+    [[ -f "$f" ]] || return
+    name=$(basename "$f" .toml)
+    service_name="rathole-${name}.service"
+    if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+        echo -e "${GREEN}[Active]${NC}"
+    else
+        echo -e "${RED}[Inactive]${NC}"
+    fi
+}
+
 # Function for destroying tunnel
 tunnel_management() {
 	echo
@@ -879,7 +893,7 @@ tunnel_management() {
             config_port="${config_name#iran}"
             config_port="${config_port%.toml}"
             configs+=("$config_path")
-            echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path")"
+            echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path") $(get_tunnel_status "$config_path")"
             ((index++))
         fi
     done
@@ -890,7 +904,7 @@ tunnel_management() {
             config_port="${config_name#kharej}"
             config_port="${config_port%.toml}"
             configs+=("$config_path")
-            echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path")"
+            echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path") $(get_tunnel_status "$config_path")"
             ((index++))
         fi
     done
@@ -927,8 +941,8 @@ tunnel_management() {
 		colorize yellow "2) Restart this tunnel"
 		colorize green "3) Add a new config for this tunnel"
 		colorize cyan "4) Edit tunnel configuration"
-		colorize reset "5) Add a cronjob for this tunnel (DEPRECATED - restarts whole rathole)"
-		colorize reset "6) Remove existing cronjob for this tunnel (DEPRECATED)"
+		echo -e " 5) Add a cronjob for this tunnel (${RED}DEPRECATED${NC} - restarts whole rathole)"
+		echo -e " 6) Remove existing cronjob for this tunnel (${RED}DEPRECATED${NC})"
 		colorize reset "7) View service logs"
 		colorize reset "8) View service status"
 		colorize magenta "9) Stop this tunnel"
@@ -944,8 +958,8 @@ tunnel_management() {
 			2) restart_service "$service_name" ;;
 			3) add_new_config "$selected_config" ;;
 			4) edit_tunnel_config "$selected_config" "$service_name" ;;
-			5) colorize yellow "DEPRECATED: This restarts whole rathole, not just this tunnel. Use main menu -> Rathole cronjob instead." bold; sleep 2; add_cron_job_menu "$service_name";;
-			6) colorize yellow "DEPRECATED: Removing per-tunnel cronjob. Use main menu -> Rathole cronjob to manage global cronjob." bold; sleep 2; delete_cron_job "$service_name";;
+			5) colorize red "DEPRECATED: This restarts whole rathole, not just this tunnel. Use main menu -> Rathole cronjob instead." bold; sleep 2; add_cron_job_menu "$service_name";;
+			6) colorize red "DEPRECATED: Removing per-tunnel cronjob. Use main menu -> Rathole cronjob to manage global cronjob." bold; sleep 2; delete_cron_job "$service_name";;
 			7) view_service_logs "$service_name" ;;
 			8) view_service_status "$service_name" ;;
 			9) stop_service "$service_name" ;;
@@ -1165,6 +1179,59 @@ delete_cron_job() {
     
     colorize green "Cron job for $service_name deleted successfully." bold
     sleep 2
+}
+
+# Stop all rathole tunnels (main menu)
+main_stop_all_tunnels() {
+    echo
+    local count=0
+    while read -r u; do
+        [[ -z "$u" ]] && continue
+        systemctl stop "$u" 2>/dev/null && { colorize green "Stopped: $u"; ((count++)) || true; }
+    done < <(systemctl list-units 'rathole-*.service' --no-legend 2>/dev/null | awk '{print $1}')
+    if [[ $count -eq 0 ]]; then
+        colorize yellow "No rathole tunnel services found or already stopped." bold
+    else
+        colorize green "Stopped $count tunnel(s)." bold
+    fi
+    echo
+    press_key
+}
+
+# Start all rathole tunnels (main menu)
+main_start_all_tunnels() {
+    echo
+    local count=0
+    while read -r u; do
+        [[ -z "$u" ]] && continue
+        systemctl start "$u" 2>/dev/null && { colorize green "Started: $u"; ((count++)) || true; }
+    done < <(systemctl list-unit-files 'rathole-*.service' --no-legend 2>/dev/null | awk '{print $1}')
+    if [[ $count -eq 0 ]]; then
+        colorize yellow "No rathole tunnel services found to start." bold
+    else
+        colorize green "Started $count tunnel(s)." bold
+    fi
+    echo
+    press_key
+}
+
+# Restart all rathole tunnels (main menu)
+main_restart_all_tunnels() {
+    echo
+    colorize yellow "Restarting all rathole tunnels..." bold
+    echo
+    local count=0
+    while read -r u; do
+        [[ -z "$u" ]] && continue
+        systemctl restart "$u" 2>/dev/null && { colorize green "Restarted: $u"; ((count++)) || true; }
+    done < <(systemctl list-units 'rathole-*.service' --no-legend 2>/dev/null | awk '{print $1}')
+    if [[ $count -eq 0 ]]; then
+        colorize yellow "No rathole tunnel services found to restart." bold
+    else
+        colorize green "Restarted $count tunnel(s)." bold
+    fi
+    echo
+    press_key
 }
 
 # Global rathole restart cronjob (main menu) - restarts all rathole services
@@ -2042,13 +2109,16 @@ display_menu() {
     colorize green " 1. Configure a new tunnel [IPv4/IPv6]" bold
     colorize red " 2. Tunnel management menu" bold
     colorize cyan " 3. Check tunnels status" bold
- 	echo -e " 4. Rathole cronjob (add/remove/edit - restart whole rathole)"
- 	echo -e " 5. Optimize network & system limits"
- 	echo -e " 6. Install rathole core"
- 	echo -e " 7. Update & install script"
- 	echo -e " 8. Change core [experimental]"
- 	echo -e " 9. Remove rathole core"
- 	colorize yellow " 10. Remove script" bold
+ 	echo -e " 4. Stop all tunnels"
+ 	echo -e " 5. Start all tunnels"
+ 	echo -e " 6. Restart all tunnels"
+ 	echo -e " 7. Rathole cronjob (add/remove/edit - restart whole rathole)"
+ 	echo -e " 8. Optimize network & system limits"
+ 	echo -e " 9. Install rathole core"
+ 	echo -e "10. Update & install script"
+ 	echo -e "11. Change core [experimental]"
+ 	echo -e "12. Remove rathole core"
+ 	colorize yellow "13. Remove script" bold
     echo -e " 0. Exit"
     echo
     echo "-------------------------------"
@@ -2056,18 +2126,21 @@ display_menu() {
 
 # Function to read user input
 read_option() {
-    read -p "Enter your choice [0-10]: " choice
+    read -p "Enter your choice [0-13]: " choice
     case $choice in
         1) configure_tunnel ;;
         2) tunnel_management ;;
         3) check_tunnel_status ;;
-        4) main_cronjob_menu ;;
-        5) hawshemi_script ;;
-        6) install_rathole_core_menu ;;
-        7) update_script ;;
-        8) change_core ;;
-        9) remove_core ;;
-        10) remove_script ;;
+        4) main_stop_all_tunnels ;;
+        5) main_start_all_tunnels ;;
+        6) main_restart_all_tunnels ;;
+        7) main_cronjob_menu ;;
+        8) hawshemi_script ;;
+        9) install_rathole_core_menu ;;
+        10) update_script ;;
+        11) change_core ;;
+        12) remove_core ;;
+        13) remove_script ;;
         0) exit 0 ;;
         *) echo -e "${RED} Invalid option!${NC}" && sleep 1 ;;
     esac
