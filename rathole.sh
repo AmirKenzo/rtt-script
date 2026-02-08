@@ -251,7 +251,7 @@ ____________ _/  |_|  |__   ____ |  |   ____
             \/          \/                 \/ 	
 EOF
     echo -e "${NC}${GREEN}"
-    echo -e "Version: ${YELLOW}v3.2${GREEN}"
+    echo -e "Version: ${YELLOW}V3.3${GREEN}"
     echo -e "Github: ${YELLOW}github.com/AmirKenzo/rtt-script${GREEN}"
 }
 
