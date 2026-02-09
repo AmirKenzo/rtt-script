@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SCRIPT_VERSION="3.4"
+
 # Check if the script is run as root
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root" 
@@ -251,7 +253,7 @@ ____________ _/  |_|  |__   ____ |  |   ____
             \/          \/                 \/ 	
 EOF
     echo -e "${NC}${GREEN}"
-    echo -e "Version: ${YELLOW}V3.3${GREEN}"
+    echo -e "Version: ${YELLOW}${SCRIPT_VERSION}${GREEN}"
     echo -e "Github: ${YELLOW}github.com/AmirKenzo/rtt-script${GREEN}"
 }
 
@@ -738,6 +740,347 @@ EOF
     colorize green "Kharej server configuration completed successfully."
 }
 
+default_token="5f12893203437ba75df29b9344a2c1122c35061fbde1f93b167b3e87204173a4"
+
+# Add IRAN tunnel (non-interactive). CLI: add-iran --port PORT --ports P1,P2,...
+quick_iran() {
+    if [[ ! -d "$config_dir" ]]; then
+        colorize red "Rathole-core not found. Install it first (menu option 9)." bold
+        return 1
+    fi
+    local tunnel_port=""
+    local input_ports=""
+    local nodelay="true"
+    local heartbeat_val="0"
+    local transport="tcp"
+    local token="$default_token"
+    local local_ip="0.0.0.0"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port) tunnel_port="$2"; shift 2 ;;
+            --ports) input_ports="$2"; shift 2 ;;
+            --nodelay) nodelay="$2"; shift 2 ;;
+            --heartbeat) [[ "$2" == "true" ]] && heartbeat_val="30"; shift 2 ;;
+            --transport) transport="$2"; shift 2 ;;
+            --token) token="$2"; shift 2 ;;
+            --ipv6) [[ "$2" == "true" || "$2" == "y" ]] && local_ip="[::]"; shift 2 ;;
+            --save) shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    if [[ -z "$tunnel_port" || -z "$input_ports" ]]; then
+        colorize red "Usage: add-iran --port RATHOLE_PORT --ports PORT1,PORT2,... [--nodelay true] [--heartbeat false] [--transport tcp] [--token TOKEN] [--ipv6 false]" bold
+        return 1
+    fi
+    if [[ ! "$tunnel_port" =~ ^[0-9]+$ ]] || [[ "$tunnel_port" -le 22 || "$tunnel_port" -gt 65535 ]]; then
+        colorize red "Invalid Rathole port (use 23-65535)." bold
+        return 1
+    fi
+    if [[ -f "${config_dir}/iran${tunnel_port}.toml" ]]; then
+        colorize red "Tunnel with port $tunnel_port already exists. Use tunnel management (menu 2) to manage it." bold
+        return 1
+    fi
+    if check_port "$tunnel_port" "tcp"; then
+        colorize red "Port $tunnel_port is in use." bold
+        return 1
+    fi
+    [[ "$nodelay" != "true" ]] && nodelay="false"
+    [[ "$transport" != "udp" ]] && transport="tcp"
+    input_ports=$(echo "$input_ports" | tr -d ' ')
+    IFS=',' read -r -a ports <<< "$input_ports"
+    declare -a config_ports
+    for port in "${ports[@]}"; do
+        if [[ "$port" =~ ^[0-9]+$ ]] && [[ "$port" -gt 22 && "$port" -le 65535 ]]; then
+            if check_port "$port" "$transport"; then
+                colorize red "[ERROR] Port $port is in use." bold
+            else
+                colorize green "[INFO] Port $port added." bold
+                config_ports+=("$port")
+            fi
+        fi
+    done
+    if [[ ${#config_ports[@]} -eq 0 ]]; then
+        colorize red "No valid ports. Exiting." bold
+        return 1
+    fi
+    colorize cyan "Configuring IRAN server (add)" bold
+    cat << EOF > "${config_dir}/iran${tunnel_port}.toml"
+[server]
+bind_addr = "${local_ip}:${tunnel_port}"
+default_token = "$token"
+heartbeat_interval = $heartbeat_val
+
+[server.transport]
+type = "tcp"
+
+[server.transport.tcp]
+nodelay = $nodelay
+
+EOF
+    for port in "${config_ports[@]}"; do
+        cat << EOF >> "${config_dir}/iran${tunnel_port}.toml"
+[server.services.${tunnel_port}]
+type = "$transport"
+bind_addr = "${local_ip}:${port}"
+
+EOF
+    done
+    cat << EOF > "${service_dir}/rathole-iran${tunnel_port}.service"
+[Unit]
+Description=Rathole Iran Port $tunnel_port (Iran)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${config_dir}/rathole ${config_dir}/iran${tunnel_port}.toml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload >/dev/null 2>&1
+    if systemctl enable --now "rathole-iran${tunnel_port}.service" >/dev/null 2>&1; then
+        colorize green "Iran service (port $tunnel_port) enabled and started." bold
+    else
+        colorize red "Failed to enable service." bold
+        return 1
+    fi
+    colorize green "IRAN configuration completed." bold
+    return 0
+}
+
+# Add KHAREJ tunnel (non-interactive). CLI: add-kharej --server IRAN_IP --port PORT --ports P1,P2,...
+quick_kharej() {
+    if [[ ! -d "$config_dir" ]]; then
+        colorize red "Rathole-core not found. Install it first (menu option 9)." bold
+        return 1
+    fi
+    local SERVER_ADDR=""
+    local tunnel_port=""
+    local input_ports=""
+    local nodelay="true"
+    local heartbeat_val="0"
+    local transport="tcp"
+    local token="$default_token"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --server) SERVER_ADDR="$2"; shift 2 ;;
+            --port) tunnel_port="$2"; shift 2 ;;
+            --ports) input_ports="$2"; shift 2 ;;
+            --nodelay) nodelay="$2"; shift 2 ;;
+            --heartbeat) [[ "$2" == "true" ]] && heartbeat_val="40"; shift 2 ;;
+            --transport) transport="$2"; shift 2 ;;
+            --token) token="$2"; shift 2 ;;
+            --save) shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    if [[ -z "$SERVER_ADDR" || -z "$tunnel_port" || -z "$input_ports" ]]; then
+        colorize red "Usage: add-kharej --server IRAN_IP --port RATHOLE_PORT --ports PORT1,PORT2,... [--nodelay true] [--heartbeat false] [--transport tcp] [--token TOKEN]" bold
+        return 1
+    fi
+    if [[ ! "$tunnel_port" =~ ^[0-9]+$ ]] || [[ "$tunnel_port" -le 22 || "$tunnel_port" -gt 65535 ]]; then
+        colorize red "Invalid Rathole port (use 23-65535)." bold
+        return 1
+    fi
+    if [[ -f "${config_dir}/kharej${tunnel_port}.toml" ]]; then
+        colorize red "Tunnel with port $tunnel_port already exists. Use tunnel management (menu 2) to manage it." bold
+        return 1
+    fi
+    [[ "$nodelay" != "true" ]] && nodelay="false"
+    [[ "$transport" != "udp" ]] && transport="tcp"
+    input_ports=$(echo "$input_ports" | tr -d ' ')
+    IFS=',' read -r -a ports <<< "$input_ports"
+    declare -a config_ports
+    for port in "${ports[@]}"; do
+        if [[ "$port" =~ ^[0-9]+$ ]] && [[ "$port" -gt 22 && "$port" -le 65535 ]]; then
+            colorize green "[INFO] Port $port added." bold
+            config_ports+=("$port")
+        fi
+    done
+    if [[ ${#config_ports[@]} -eq 0 ]]; then
+        colorize red "No valid ports. Exiting." bold
+        return 1
+    fi
+    local local_ip="0.0.0.0"
+    if check_ipv6 "$SERVER_ADDR"; then
+        local_ip="[::]"
+        SERVER_ADDR="${SERVER_ADDR#[}"; SERVER_ADDR="${SERVER_ADDR%]}"
+    fi
+    colorize cyan "Configuring KHAREJ server (add)" bold
+    cat << EOF > "${config_dir}/kharej${tunnel_port}.toml"
+[client]
+remote_addr = "${SERVER_ADDR}:${tunnel_port}"
+default_token = "$token"
+heartbeat_timeout = $heartbeat_val
+retry_interval = 1
+
+[client.transport]
+type = "tcp"
+
+[client.transport.tcp]
+nodelay = $nodelay
+
+EOF
+    for port in "${config_ports[@]}"; do
+        cat << EOF >> "${config_dir}/kharej${tunnel_port}.toml"
+[client.services.${tunnel_port}]
+type = "$transport"
+local_addr = "${local_ip}:${port}"
+
+EOF
+    done
+    cat << EOF > "${service_dir}/rathole-kharej${tunnel_port}.service"
+[Unit]
+Description=Rathole Kharej Port $tunnel_port
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${config_dir}/rathole ${config_dir}/kharej${tunnel_port}.toml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload >/dev/null 2>&1
+    if systemctl enable --now "rathole-kharej${tunnel_port}.service" >/dev/null 2>&1; then
+        colorize green "Kharej service (port $tunnel_port) enabled and started." bold
+    else
+        colorize red "Failed to enable service." bold
+        return 1
+    fi
+    colorize green "KHAREJ configuration completed." bold
+    return 0
+}
+
+print_cli_usage() {
+    colorize cyan "CLI commands:" bold
+    echo
+    colorize green "  Add tunnel:" bold
+    echo "    rathole add-iran --port RATHOLE_PORT --ports PORT1,PORT2,... [--nodelay true] [--heartbeat false] [--transport tcp] [--token TOKEN] [--ipv6 false]"
+    echo "    rathole add-kharej --server IRAN_IP --port RATHOLE_PORT --ports PORT1,PORT2,... [--nodelay true] [--heartbeat false] [--transport tcp] [--token TOKEN]"
+    echo
+    colorize red "  Remove:" bold
+    echo "    rathole remove-all   - remove all tunnels (configs + services)"
+    echo
+    colorize yellow "  Control:" bold
+    echo "    rathole stop-all     - stop all tunnels"
+    echo "    rathole start-all    - start all tunnels"
+    echo "    rathole restart-all  - restart all tunnels"
+    echo
+    colorize cyan "  List & update:" bold
+    echo "    rathole list         - list all tunnels (same as menu 2)"
+    echo "    rathole script-update - update script from GitHub"
+    echo
+    colorize yellow "  Example:" bold
+    echo "    rathole add-iran --port 1262 --ports 702 --heartbeat true"
+    echo "    rathole add-kharej --server 1.2.3.4 --port 1262 --ports 702"
+}
+
+# Remove all tunnels (configs + systemd services)
+cli_remove_all_tunnels() {
+    if ! ls "$config_dir"/*.toml 1>/dev/null 2>&1; then
+        colorize yellow "No tunnel configs found." bold
+        return 0
+    fi
+    local count=0
+    for config_path in "$config_dir"/iran*.toml "$config_dir"/kharej*.toml; do
+        [[ -f "$config_path" ]] || continue
+        destroy_tunnel "$config_path"
+        ((count++)) || true
+    done
+    if [[ $count -gt 0 ]]; then
+        colorize green "All $count tunnel(s) removed." bold
+    fi
+    return 0
+}
+
+# List all tunnels (same output as menu option 2, no interaction)
+cli_list_tunnels() {
+    if ! ls "$config_dir"/*.toml 1>/dev/null 2>&1; then
+        colorize red "No config files found in the rathole directory." bold
+        return 1
+    fi
+    colorize cyan "List of existing tunnels:" bold
+    echo
+    local index=1
+    for config_path in "$config_dir"/iran*.toml; do
+        [[ -f "$config_path" ]] || continue
+        echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path") $(get_tunnel_status "$config_path")"
+        ((index++))
+    done
+    for config_path in "$config_dir"/kharej*.toml; do
+        [[ -f "$config_path" ]] || continue
+        echo -e "${MAGENTA}${index}${NC}) $(get_service_display_info "$config_path") $(get_tunnel_status "$config_path")"
+        ((index++))
+    done
+    echo
+    return 0
+}
+
+# Stop all tunnels (CLI: no press_key)
+cli_stop_all_tunnels() {
+    local count=0
+    while read -r u; do
+        [[ -z "$u" ]] && continue
+        systemctl stop "$u" 2>/dev/null && { colorize green "Stopped: $u"; ((count++)) || true; }
+    done < <(systemctl list-units 'rathole-*.service' --no-legend 2>/dev/null | awk '{print $1}')
+    if [[ $count -eq 0 ]]; then
+        colorize yellow "No rathole tunnel services found or already stopped." bold
+    else
+        colorize green "Stopped $count tunnel(s)." bold
+    fi
+    return 0
+}
+
+# Start all tunnels (CLI: no press_key)
+cli_start_all_tunnels() {
+    local count=0
+    while read -r u; do
+        [[ -z "$u" ]] && continue
+        systemctl start "$u" 2>/dev/null && { colorize green "Started: $u"; ((count++)) || true; }
+    done < <(systemctl list-unit-files 'rathole-*.service' --no-legend 2>/dev/null | awk '{print $1}')
+    if [[ $count -eq 0 ]]; then
+        colorize yellow "No rathole tunnel services found to start." bold
+    else
+        colorize green "Started $count tunnel(s)." bold
+    fi
+    return 0
+}
+
+# Restart all tunnels (CLI: no press_key)
+cli_restart_all_tunnels() {
+    colorize yellow "Restarting all rathole tunnels..." bold
+    local count=0
+    while read -r u; do
+        [[ -z "$u" ]] && continue
+        systemctl restart "$u" 2>/dev/null && { colorize green "Restarted: $u"; ((count++)) || true; }
+    done < <(systemctl list-units 'rathole-*.service' --no-legend 2>/dev/null | awk '{print $1}')
+    if [[ $count -eq 0 ]]; then
+        colorize yellow "No rathole tunnel services found to restart." bold
+    else
+        colorize green "Restarted $count tunnel(s)." bold
+    fi
+    return 0
+}
+
+handle_cli() {
+    case "${1:-}" in
+        add-iran) shift; quick_iran "$@" ;;
+        add-kharej) shift; quick_kharej "$@" ;;
+        remove-all) cli_remove_all_tunnels ;;
+        stop-all) cli_stop_all_tunnels ;;
+        start-all) cli_start_all_tunnels ;;
+        restart-all) cli_restart_all_tunnels ;;
+        list) cli_list_tunnels ;;
+        script-update) update_script "cli" ;;
+        add|help|--help|-h) print_cli_usage ;;
+        *) return 1 ;;
+    esac
+}
 
 # Function for checking tunnel status
 check_tunnel_status() {
@@ -1545,6 +1888,7 @@ view_service_status (){
 }
 
 update_script(){
+local cli_mode="${1:-}"
 # Define the destination path
 DEST_DIR="/usr/local/bin/"
 OLD_DEST_DIR="/usr/bin/"
@@ -1592,7 +1936,9 @@ if [ $? -eq 0 ]; then
     fi
     colorize yellow "Type 'rathole' to run the script.\n" bold
     colorize yellow "For removing script type: 'rm -rf /usr/local/bin/rathole'\n" bold
-    press_key
+    if [[ "$cli_mode" != "cli" ]]; then
+        press_key
+    fi
     exit 0
 else
     echo -e "${RED}Failed to download $RATHOLE_SCRIPT from $SCRIPT_URL.${NC}"
@@ -2107,6 +2453,7 @@ display_menu() {
     display_rathole_core_status
     echo
     colorize green " 1. Configure a new tunnel [IPv4/IPv6]" bold
+    colorize yellow " 1q. CLI commands (add/remove-all/list/script-update)" bold
     colorize red " 2. Tunnel management menu" bold
     colorize cyan " 3. Check tunnels status" bold
  	echo -e " 4. Stop all tunnels"
@@ -2129,6 +2476,7 @@ read_option() {
     read -p "Enter your choice [0-13]: " choice
     case $choice in
         1) configure_tunnel ;;
+        1q|1Q) print_cli_usage; echo; read -p "Press Enter to continue..." ;;
         2) tunnel_management ;;
         3) check_tunnel_status ;;
         4) main_stop_all_tunnels ;;
@@ -2146,7 +2494,11 @@ read_option() {
     esac
 }
 
-# Main script
+# Main script: CLI commands run and exit with same code; no args = menu
+if [[ $# -gt 0 ]]; then
+    handle_cli "$@"
+    exit $?
+fi
 while true
 do
     display_menu
